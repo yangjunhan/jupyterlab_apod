@@ -33,6 +33,7 @@ async function activate(
   console.log('JupyterLab extension jupyterlab_apod is activated!');
   // Create a blank content widget inside of a MainAreaWidget
   const content = new Widget();
+  content.addClass('my-apodWidget');
   const widget = new MainAreaWidget({ content });
   widget.id = 'apod-jupyterlab';
   widget.title.label = 'Astronomy Picture';
@@ -41,6 +42,9 @@ async function activate(
   // Add an image element to the content
   const img = document.createElement('img');
   content.node.appendChild(img);
+
+  const summary = document.createElement('p');
+  content.node.appendChild(summary);
 
   // Get a random date string in YYYY-MM-DD format
   function randomDate() {
@@ -52,18 +56,30 @@ async function activate(
     return randomDate.toISOString().slice(0, 10);
   }
 
-  // Fetch info about a random picture
   const response = await fetch(
     `https://api.nasa.gov/planetary/apod?api_key=DEMO_KEY&date=${randomDate()}`
   );
-  const data = (await response.json()) as IAPODResponse;
-
-  if (data.media_type === 'image') {
-    // Populate the image
-    img.src = data.url;
-    img.title = data.title;
+  if (!response.ok) {
+    const data = await response.json();
+    if (data.error) {
+      summary.innerText = data.error.message;
+    } else {
+      summary.innerText = response.statusText;
+    }
   } else {
-    console.log('Random APOD was not a picture.');
+    const data = (await response.json()) as IAPODResponse;
+
+    if (data.media_type === 'image') {
+      // Populate the image
+      img.src = data.url;
+      img.title = data.title;
+      summary.innerText = data.title;
+      if (data.copyright) {
+        summary.innerText += ` (Copyright ${data.copyright})`;
+      }
+    } else {
+      summary.innerText = 'Random APOD fetched was not an image.';
+    }
   }
 
   // Add an application command
