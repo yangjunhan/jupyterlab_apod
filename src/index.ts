@@ -1,8 +1,13 @@
 import {
+  ILayoutRestorer,
   JupyterFrontEnd,
   JupyterFrontEndPlugin
 } from '@jupyterlab/application';
-import { ICommandPalette, MainAreaWidget } from '@jupyterlab/apputils';
+import {
+  ICommandPalette,
+  MainAreaWidget,
+  WidgetTracker
+} from '@jupyterlab/apputils';
 import { Widget } from '@lumino/widgets';
 import { Message } from '@lumino/messaging';
 
@@ -21,31 +26,45 @@ interface IAPODResponse {
 const plugin: JupyterFrontEndPlugin<void> = {
   id: 'jupyterlab_apod:plugin',
   autoStart: true,
-  requires: [ICommandPalette],
+  requires: [ICommandPalette, ILayoutRestorer],
   activate
 };
 
 export default plugin;
 
-function activate(app: JupyterFrontEnd, palette: ICommandPalette): void {
+function activate(
+  app: JupyterFrontEnd,
+  palette: ICommandPalette,
+  restorer: ILayoutRestorer
+): void {
   console.log('JupyterLab extension jupyterlab_apod is activated!');
-  // Create a blank content widget inside of a MainAreaWidget
-  const content = new APODWidget();
-  content.addClass('my-apodWidget');
-  const widget = new MainAreaWidget({ content });
-  widget.id = 'apod-jupyterlab';
-  widget.title.label = 'Astronomy Picture';
-  widget.title.closable = true;
+
+  // Declare a widget variable
+  let widget: MainAreaWidget<APODWidget>;
 
   // Add an application command
   const command = 'apod:open';
   app.commands.addCommand(command, {
     label: 'Random Astronomy Picture',
     execute: () => {
+      if (!widget || widget.isDisposed) {
+        // Create a new widget if one does not exist
+        // or if the previous one was disposed after closing the panel
+        const content = new APODWidget();
+        widget = new MainAreaWidget({ content });
+        widget.id = 'apod-jupyterlab';
+        widget.title.label = 'Astronomy Picture';
+        widget.title.closable = true;
+      }
+      if (!tracker.has(widget)) {
+        // Track the state of the widget for later restoration
+        tracker.add(widget);
+      }
       if (!widget.isAttached) {
         // Attach the widget to the main work area if it's not there
         app.shell.add(widget, 'main');
       }
+      widget.content.update();
       // Activate the widget
       app.shell.activateById(widget.id);
     }
@@ -53,6 +72,15 @@ function activate(app: JupyterFrontEnd, palette: ICommandPalette): void {
 
   // Add the command to the palette.
   palette.addItem({ command, category: 'Tutorial' });
+
+  // Track and restore the widget state
+  const tracker = new WidgetTracker<MainAreaWidget<APODWidget>>({
+    namespace: 'apod'
+  });
+  restorer.restore(tracker, {
+    command,
+    name: () => 'apod'
+  });
 }
 
 class APODWidget extends Widget {
